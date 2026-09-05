@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# shorts-analytics: Agenten-Laufergebnisse (reproduzierbar aus den APIs, nicht versioniert)
+data/runs/*
+!data/runs/.gitkeep
+.env

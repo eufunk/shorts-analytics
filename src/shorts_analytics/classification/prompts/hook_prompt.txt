@@ -1,0 +1,22 @@
+Analysiere die Struktur des folgenden YouTube Shorts anhand von Titel und Beschreibung.
+
+Titel: {title}
+Beschreibung: {description}
+Videolaenge (Sekunden): {duration_seconds}
+
+Bestimme:
+- hook_type: einer von [ueberraschende_aussage, direkte_frage, ungewoehnliche_behauptung, konflikt_oder_problem, sofortige_handlung, visuell_ungewoehnliche_szene, versprechen_eines_ergebnisses, offene_frage_informationsluecke, sonstige]
+- format_type: kurze freie Bezeichnung, z.B. Story, Liste, Frage, Experiment, Erklaerung
+- has_tension_build: baut das Video eine offene Frage/ein ungeloestes Problem auf? (true/false/null falls nicht einschaetzbar)
+- has_payoff: gibt es am Ende eine klare Aufloesung/Pointe? (true/false/null)
+- has_loop_potential: ist das Ende so gestaltet, dass ein erneutes Ansehen wahrscheinlich ist? (true/false/null)
+- has_call_to_action: enthaelt das Video einen klaren Call-to-Action? (true/false/null)
+- confidence: deine Sicherheit bei dieser Einschaetzung, Zahl zwischen 0.0 und 1.0
+- reasoning: ein kurzer Satz, der deine Einschaetzung begruendet
+
+Titel und Beschreibung sind oft die einzigen verfuegbaren Signale (kein
+Video-/Audiomaterial) - schaetze konservativ und setze bei echter
+Unsicherheit null statt true/false zu raten.
+
+Antworte ausschliesslich mit folgendem JSON-Format, ohne Erklaerungstext:
+{{"hook_type": "...", "format_type": "...", "has_tension_build": ..., "has_payoff": ..., "has_loop_potential": ..., "has_call_to_action": ..., "confidence": ..., "reasoning": "..."}}

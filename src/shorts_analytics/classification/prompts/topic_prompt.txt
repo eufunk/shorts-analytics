@@ -1,0 +1,14 @@
+Ordne das folgende YouTube Short einer Themenkategorie zu.
+
+Verfuegbare Kategorien:
+{categories}
+
+Titel: {title}
+Beschreibung: {description}
+
+Waehle die am besten passende Kategorie aus der Liste. Falls wirklich keine
+Kategorie passt, schlage eine neue, praegnante Kategorie vor und setze
+"is_new_topic_suggestion" auf true.
+
+Antworte ausschliesslich mit folgendem JSON-Format, ohne Erklaerungstext:
+{{"topic": "<Kategorie>", "subtopic": "<genauere Einordnung oder null>", "is_new_topic_suggestion": <true|false>}}
