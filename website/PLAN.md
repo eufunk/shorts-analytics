@@ -44,3 +44,18 @@
 - [x] **CP8 – Tests:** Tests für Fortschrittsmeldungen, Stopp, Statusdateien und Lauf-Übersicht. Die bestehenden 33 Tests bestehen weiterhin.
 - [x] **CP9 – Prüfung im Browser:** Das Control Panel starten, alle Seiten durchklicken, Screenshot-Kontrolle.
 - [x] **CP10 – Doku & Webseite aktualisieren:** README (Start über die Oberfläche) und Projekt-Webseite (Einleitung, „Erledigt“) anpassen.
+
+---
+
+## Task 3: Start-Button auf dem Desktop ✅
+
+**Hinzugefügt:** 30.10.2026
+**Ziel:** Ein Doppelklick auf ein Desktop-Symbol startet den Server des Control Panels und öffnet es im Browser, ganz ohne Terminal.
+
+### Checkpoints
+
+- [x] **CP1 – Startskript:** `start_control_panel.bat` im Projektordner. Läuft der Server schon, wird nur der Browser geöffnet. Sonst wird der Server in einem minimierten Fenster gestartet (Fenster schließen = Server beenden), das Skript wartet, bis er erreichbar ist, und öffnet dann den Browser.
+- [x] **CP2 – Symbol:** eigenes Icon für die Verknüpfung (`dashboard/icon.ico`).
+- [x] **CP3 – Desktop-Verknüpfung:** „Shorts Analytics“ auf dem Desktop, zeigt auf das Startskript.
+- [x] **CP4 – Test:** Start aus kaltem Zustand und Start bei bereits laufendem Server geprüft.
+- [x] **CP5 – Doku:** README um den Start per Doppelklick ergänzen.

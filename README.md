@@ -86,6 +86,8 @@ pip install -e ".[dashboard]"
 streamlit run dashboard/app.py
 ```
 
+**Start per Doppelklick (Windows):** [`start_control_panel.bat`](start_control_panel.bat) startet den Server auf Port 8502 in einem minimierten Fenster und öffnet das Control Panel im Browser. Läuft der Server schon, wird nur der Browser geöffnet. Fenster „Shorts Analytics Server“ schließen = Server beenden. Eine Desktop-Verknüpfung mit eigenem Symbol ([`dashboard/icon.ico`](dashboard/icon.ico)) lässt sich auf das Skript anlegen.
+
 So funktioniert es: Ein gestarteter Lauf arbeitet als eigener Hintergrundprozess (über die CLI mit `--run-id`), er läuft also weiter, auch wenn der Browser-Tab geschlossen wird. Fortschritt und Zustand stehen in `data/runs/<run_id>/status.json`. „Lauf anhalten“ legt die Datei `stop.requested` an; der Agent hört dann nach dem aktuellen Video bzw. der aktuellen Suchanfrage sauber auf und speichert keinen Report. Es läuft immer nur ein Lauf gleichzeitig. Die Logik dafür liegt in [`run_status.py`](src/shorts_analytics/run_status.py) und [`run_control.py`](src/shorts_analytics/run_control.py).
 
 Die API-Keys in `.env` werden auch für Läufe aus dem Control Panel benötigt; fehlen sie, zeigt die Seite „Neuer Lauf“ einen Hinweis.
