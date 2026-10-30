@@ -2,6 +2,8 @@
 
 Datenbasierte Analyse von YouTube Shorts zur Untersuchung von Zuschauerbindung, Durchschauquote, Videolänge, Hooks, Themen und Erfolgsfaktoren.
 
+📄 **Projekt-Webseite:** [`website/index.html`](website/index.html) – Zweck, Nutzen, Zielgruppe, erledigte und geplante Arbeiten auf einen Blick (im Browser öffnen).
+
 Dieses Repository enthält einen **Research-Agenten**, der eigenständig YouTube Shorts sammelt, analysiert und daraus einen strukturierten Report erstellt. Die fachliche Spezifikation liegt unter [`docs/YouTube_Shorts_Research_Analyse.docx`](docs/YouTube_Shorts_Research_Analyse.docx), die Architekturentscheidungen sind unten zusammengefasst.
 
 ## Architektur in Kürze
@@ -68,17 +70,25 @@ Jeder Lauf erzeugt einen Ordner unter `data/runs/<run_id>/` mit:
 - `classifications.json` – LLM-Klassifizierung je Video (Thema, Hook-Typ, Struktur)
 - `run_metadata.json` – Suchparameter, Zeitpunkt, verwendetes Modell, Fehler, Einschränkungen (Reproduzierbarkeit)
 - `report.json` / `report.md` – der finale, strukturierte Research-Report
+- `status.json` – Zustand und Fortschritt des Laufs (für das Control Panel)
 
-## Dashboard
+## Control Panel (Bedienoberfläche)
 
-Ein Streamlit-Dashboard (in [`dashboard/app.py`](dashboard/app.py)) visualisiert einen bereits erzeugten Report (KPI-Kacheln, Balkendiagramme je Thema/Hook/Format/Videolänge, Datenvollständigkeit, Rankings, erkannte Muster, Rohdaten-Export). Es startet **keinen neuen Analyse-Lauf** — es zeigt standardmäßig den zuletzt erzeugten Report an; ältere Läufe lassen sich in der Seitenleiste auswählen.
+Statt über das Terminal lässt sich der Agent bequem im Browser bedienen. Das Control Panel ([`dashboard/app.py`](dashboard/app.py)) hat vier Seiten:
+
+- **Neuer Lauf** – Themen und Anzahl Videos wählen, geschätzten Verbrauch (YouTube-Kontingent, KI-Aufrufe) ansehen, Lauf starten
+- **Fortschritt** – Live-Anzeige der 9 Pipeline-Schritte (aktualisiert alle 2 Sekunden), Lauf anhalten oder im Notfall sofort beenden, Ausgabe des Agenten (`log.txt`)
+- **Ergebnisse** – Visualisierung eines fertigen Reports (KPI-Kacheln, Balkendiagramme je Thema/Hook/Format/Videolänge, Datenvollständigkeit, Rankings, erkannte Muster, Rohdaten-Export)
+- **Alle Läufe** – Übersicht aller Läufe mit Status (läuft / fertig / abgebrochen / fehlgeschlagen)
 
 ```bash
 pip install -e ".[dashboard]"
 streamlit run dashboard/app.py
 ```
 
-Voraussetzung: mindestens ein Lauf muss bereits über `shorts-analytics` erzeugt worden sein (siehe oben). Das Dashboard liest ausschließlich aus `data/runs/` und ist unabhängig vom `shorts_analytics`-Package als eigenständiges Tool im Ordner `dashboard/` organisiert.
+So funktioniert es: Ein gestarteter Lauf arbeitet als eigener Hintergrundprozess (über die CLI mit `--run-id`), er läuft also weiter, auch wenn der Browser-Tab geschlossen wird. Fortschritt und Zustand stehen in `data/runs/<run_id>/status.json`. „Lauf anhalten“ legt die Datei `stop.requested` an; der Agent hört dann nach dem aktuellen Video bzw. der aktuellen Suchanfrage sauber auf und speichert keinen Report. Es läuft immer nur ein Lauf gleichzeitig. Die Logik dafür liegt in [`run_status.py`](src/shorts_analytics/run_status.py) und [`run_control.py`](src/shorts_analytics/run_control.py).
+
+Die API-Keys in `.env` werden auch für Läufe aus dem Control Panel benötigt; fehlen sie, zeigt die Seite „Neuer Lauf“ einen Hinweis.
 
 ## Eigene YouTube-Analytics-Daten (Ebene 2, optional)
 
@@ -92,6 +102,7 @@ pytest
 
 - `tests/unit/` – jedes Pipeline-Modul einzeln getestet (keine echten API-Calls)
 - `tests/integration/test_agent_pipeline.py` – kompletter Pipeline-Lauf mit Fake-Collector und Fake-LLM-Client, prüft insbesondere, dass fehlende Retention-Daten nicht erfunden werden
+- `tests/integration/test_agent_progress.py` – Fortschrittsmeldungen und Anhalten eines Laufs
 
 ## Ausblick
 

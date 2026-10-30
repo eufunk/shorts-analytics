@@ -1,22 +1,38 @@
-"""Streamlit-Dashboard: visualisiert einen bereits erzeugten Research-Report.
+"""Streamlit-Control-Panel: Agenten-Laeufe starten, beobachten und auswerten.
 
-Startet NIE selbst einen neuen Agenten-Lauf - es liest ausschliesslich die
-Artefakte, die `agent.py` bereits unter data/runs/<run_id>/ abgelegt hat, und
-zeigt standardmaessig den zuletzt erzeugten Lauf an. Ein neuer Report entsteht
-weiterhin nur ueber die CLI (`shorts-analytics ...`).
+Seiten:
+- Neuer Lauf   - Themen und Stichprobengroesse waehlen, Lauf starten
+- Fortschritt  - Live-Anzeige der 9 Pipeline-Schritte, Lauf anhalten
+- Ergebnisse   - Visualisierung eines fertigen Reports
+- Alle Laeufe  - Uebersicht aller Laeufe mit Status
+
+Ein Lauf wird als eigener Hintergrundprozess ueber die CLI gestartet
+(siehe shorts_analytics/run_control.py). Das Panel liest den Fortschritt aus
+data/runs/<run_id>/status.json und die Ergebnisse aus den dort abgelegten
+Artefakten; es ruft selbst keine YouTube- oder KI-Schnittstelle auf.
 
 Start: streamlit run dashboard/app.py
 """
 
 from __future__ import annotations
 
+import datetime as dt
 from pathlib import Path
 
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from shorts_analytics import config, run_control
 from shorts_analytics.models import GroupStats, PatternInsight, RankingEntry, Report
+from shorts_analytics.run_status import (
+    LOG_FILE,
+    PIPELINE_STAGES,
+    STATE_LABELS,
+    RunState,
+    request_stop,
+    stop_requested,
+)
 
 # ---------------------------------------------------------------------------
 # Farbpalette (Referenzpalette der dataviz-Skill, Light-Mode-Werte)
@@ -219,39 +235,249 @@ def render_patterns(patterns: list[PatternInsight]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Seite
+# Seiten des Control Panels
 # ---------------------------------------------------------------------------
-def main() -> None:
-    st.set_page_config(page_title="Shorts Analytics Dashboard", page_icon="📊", layout="wide")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DATA_DIR = PROJECT_ROOT / "data" / "runs"
+CATEGORIES = list(config.DEFAULT_SEARCH_QUERIES.keys())
 
-    data_dir = Path(__file__).resolve().parents[1] / "data" / "runs"
-    runs = find_runs(data_dir)
+STATE_ICON = {
+    RunState.RUNNING: "⏳",
+    RunState.FINISHED: "✅",
+    RunState.CANCELLED: "⏹️",
+    RunState.FAILED: "❌",
+}
+
+PAGES: dict[str, st.Page] = {}
+
+
+def state_label(state: RunState) -> str:
+    return f"{STATE_ICON[state]} {STATE_LABELS[state]}"
+
+
+def format_duration(start: dt.datetime | None, end: dt.datetime | None) -> str:
+    if start is None:
+        return "–"
+    seconds = int(((end or dt.datetime.now(dt.timezone.utc)) - start).total_seconds())
+    minutes, seconds = divmod(max(seconds, 0), 60)
+    return f"{minutes} min {seconds:02d} s" if minutes else f"{seconds} s"
+
+
+def format_local(timestamp: dt.datetime | None) -> str:
+    return timestamp.astimezone().strftime("%d.%m.%Y %H:%M") if timestamp else "–"
+
+
+def open_results(run_id: str) -> None:
+    st.session_state["selected_run"] = run_id
+    st.switch_page(PAGES["results"])
+
+
+def open_progress(run_id: str) -> None:
+    st.session_state["selected_run"] = run_id
+    st.switch_page(PAGES["progress"])
+
+
+def page_new_run() -> None:
+    st.title("🚀 Neuer Analyse-Lauf")
+    st.caption(
+        "Der Agent sucht passende Shorts über die YouTube-Schnittstelle, lässt sie von der KI einordnen, "
+        "wertet sie statistisch aus und schreibt einen Report. Der Lauf arbeitet im Hintergrund weiter, "
+        "auch wenn du diese Seite verlässt."
+    )
+
+    missing = run_control.missing_api_keys(PROJECT_ROOT)
+    if missing:
+        st.error(
+            f"Es fehlen API-Keys in der Datei `.env`: **{', '.join(missing)}**. "
+            "Vorlage: `.env.example`. Ohne diese Keys kann kein Lauf gestartet werden."
+        )
+
+    running = run_control.active_run(PROJECT_ROOT)
+    if running:
+        st.warning(f"Es läuft bereits ein Lauf ({running.run_id}). Es kann immer nur ein Lauf gleichzeitig laufen.")
+        if st.button("Zum laufenden Lauf"):
+            open_progress(running.run_id)
+
+    all_categories = st.toggle("Alle Themen untersuchen", value=False)
+    if all_categories:
+        categories = CATEGORIES
+        st.caption(f"Alle {len(CATEGORIES)} Themen werden untersucht.")
+    else:
+        categories = st.multiselect(
+            "Themen",
+            options=CATEGORIES,
+            default=["Wissen / Bildung"],
+            placeholder="Mindestens ein Thema auswählen",
+        )
+    max_results = st.slider(
+        "Videos pro Suchbegriff",
+        min_value=1,
+        max_value=50,
+        value=5,
+        help="Jedes Thema hat 1–2 Suchbegriffe. Für einen ersten Testlauf reichen 5.",
+    )
+
+    if categories:
+        usage = run_control.estimate_usage(categories, max_results)
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Suchanfragen", usage.search_queries)
+        col2.metric("Videos (höchstens)", usage.max_videos)
+        col3.metric("KI-Aufrufe (höchstens)", usage.max_llm_calls)
+        share = usage.youtube_quota_units / run_control.YOUTUBE_DAILY_QUOTA
+        st.caption(
+            f"YouTube-Kontingent: ca. {usage.youtube_quota_units:,} von {run_control.YOUTUBE_DAILY_QUOTA:,} "
+            f"Einheiten pro Tag ({share:.0%}). KI-Aufrufe werden über deinen Anthropic-Account abgerechnet."
+            .replace(",", ".")
+        )
+        if share > 1:
+            st.warning("Diese Auswahl überschreitet das tägliche YouTube-Kontingent. Bitte weniger Themen wählen.")
+
+    can_start = bool(categories) and not missing and running is None
+    if st.button("▶ Lauf starten", type="primary", disabled=not can_start):
+        run_id = run_control.start_run(PROJECT_ROOT, [] if all_categories else categories, max_results)
+        open_progress(run_id)
+
+
+@st.fragment(run_every=2)
+def live_progress(run_dir: Path, shown_state: RunState) -> None:
+    info = run_control.load_run(run_dir)
+    if info.state != shown_state:
+        st.rerun(scope="app")  # Zustand hat sich geaendert -> auch Auswahlliste oben aktualisieren
+    status = info.status
+    if status is None:
+        st.info("Für diesen älteren Lauf gibt es keine Fortschrittsdaten.")
+        if info.has_report and st.button("📊 Ergebnisse ansehen", type="primary"):
+            open_results(info.run_id)
+        return
+
+    running = info.state == RunState.RUNNING
+    st.subheader(state_label(info.state))
+    st.progress(status.fraction_done, text=f"{status.fraction_done:.0%} · {status.stage_name}")
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Laufzeit", format_duration(status.started_at, info.finished_at))
+    col2.metric("Schritt", f"{max(status.stage_index + 1, 0)} von {len(PIPELINE_STAGES)}")
+    col3.metric("Videos pro Suchbegriff", status.max_results_per_query or "–")
+    st.caption(f"Themen: {', '.join(status.categories) if status.categories else 'alle'}")
+
+    for index, name in enumerate(PIPELINE_STAGES):
+        if info.state == RunState.FINISHED or index < status.stage_index:
+            icon = "✅"
+        elif index == status.stage_index:
+            icon = {RunState.RUNNING: "⏳", RunState.CANCELLED: "⏹️", RunState.FAILED: "❌"}[info.state]
+        else:
+            icon = "⚪"
+        line = f"{icon} **{name}**" if index == status.stage_index else f"{icon} {name}"
+        if index == status.stage_index and status.detail and info.state != RunState.FINISHED:
+            line += f" · {status.detail}"
+        st.markdown(line)
+
+    if running:
+        if stop_requested(run_dir):
+            st.info("Stopp angefordert. Der Agent hält nach dem aktuellen Arbeitsschritt an.")
+            if st.button("Sofort beenden", help="Beendet den Prozess hart. Bereits gesammelte Daten gehen verloren."):
+                run_control.kill_run(run_dir)
+                st.rerun(scope="fragment")
+        elif st.button("⏹ Lauf anhalten", help="Der Agent hört nach dem aktuellen Video bzw. der aktuellen Suchanfrage auf."):
+            request_stop(run_dir)
+            st.rerun(scope="fragment")
+    elif info.state == RunState.FINISHED:
+        st.success(f"Lauf abgeschlossen in {format_duration(status.started_at, info.finished_at)}.")
+        if st.button("📊 Ergebnisse ansehen", type="primary"):
+            open_results(info.run_id)
+    elif info.state == RunState.CANCELLED:
+        st.warning("Der Lauf wurde angehalten. Es wurde kein Report gespeichert.")
+    elif info.state == RunState.FAILED:
+        st.error(f"Der Lauf ist fehlgeschlagen: {info.error or 'unbekannter Fehler'}")
+
+    log_path = run_dir / LOG_FILE
+    if log_path.exists():
+        with st.expander("Ausgabe des Agenten (log.txt)", expanded=info.state == RunState.FAILED):
+            log_text = log_path.read_text(encoding="utf-8", errors="replace")
+            st.code(log_text[-5000:] or "(noch keine Ausgabe)", language="text")
+
+
+def page_progress() -> None:
+    st.title("⏱️ Fortschritt")
+    runs = run_control.list_runs(PROJECT_ROOT)
+    if not runs:
+        st.info("Es gibt noch keine Läufe.")
+        if st.button("Neuen Lauf starten"):
+            st.switch_page(PAGES["new"])
+        return
+
+    run_ids = [run.run_id for run in runs]
+    active = next((run.run_id for run in runs if run.state == RunState.RUNNING), None)
+    preferred = st.session_state.get("selected_run") or active or run_ids[0]
+    labels = {run.run_id: f"{format_local(run.started_at)} · {state_label(run.state)} · {run.run_id}" for run in runs}
+    run_id = st.selectbox(
+        "Lauf",
+        options=run_ids,
+        index=run_ids.index(preferred) if preferred in run_ids else 0,
+        format_func=labels.get,
+    )
+    st.session_state["selected_run"] = run_id
+    live_progress(DATA_DIR / run_id, next(run.state for run in runs if run.run_id == run_id))
+
+
+def page_all_runs() -> None:
+    st.title("🗂️ Alle Läufe")
+    runs = run_control.list_runs(PROJECT_ROOT)
+    if not runs:
+        st.info("Es gibt noch keine Läufe.")
+        return
+
+    table = pd.DataFrame(
+        [
+            {
+                "Gestartet": format_local(run.started_at),
+                "Status": state_label(run.state),
+                "Themen": ", ".join(run.categories) if run.categories else "alle",
+                "Gültige Shorts": "–" if run.videos_valid is None else str(run.videos_valid),
+                "Dauer": format_duration(run.started_at, run.finished_at) if run.state != RunState.RUNNING else "läuft …",
+                "Lauf-ID": run.run_id,
+            }
+            for run in runs
+        ]
+    )
+    st.caption("Zeile anklicken, um den Lauf zu öffnen.")
+    event = st.dataframe(
+        table, hide_index=True, use_container_width=True, on_select="rerun", selection_mode="single-row"
+    )
+    if event.selection.rows:
+        run = runs[event.selection.rows[0]]
+        col1, col2 = st.columns(2)
+        if col1.button("⏱️ Fortschritt anzeigen", use_container_width=True):
+            open_progress(run.run_id)
+        if col2.button("📊 Ergebnisse ansehen", use_container_width=True, disabled=not run.has_report, type="primary"):
+            open_results(run.run_id)
+
+
+def page_results() -> None:
+    runs = find_runs(DATA_DIR)
 
     if not runs:
-        st.title("📊 YouTube Shorts Research-Dashboard")
-        st.warning(
-            "Noch kein Report gefunden. Führe zuerst einen Analyse-Lauf über die Kommandozeile aus:\n\n"
-            "`shorts-analytics --category \"...\" --max-results 5`"
-        )
-        st.stop()
+        st.title("📊 Ergebnisse")
+        st.info("Noch kein fertiger Report vorhanden. Starte zuerst einen Lauf.")
+        if st.button("Neuen Lauf starten"):
+            st.switch_page(PAGES["new"])
+        return
 
+    preferred = st.session_state.get("selected_run")
+    run_names = [p.name for p in runs]
     with st.sidebar:
-        st.header("Shorts Analytics")
         selected_dir = st.selectbox(
             "Report-Lauf",
             options=runs,
-            index=0,
+            index=run_names.index(preferred) if preferred in run_names else 0,
             format_func=lambda p: f"{p.name} " + ("(neuester)" if p == runs[0] else ""),
         )
-        st.caption(
-            "Das Dashboard zeigt einen bereits erstellten Report an. "
-            "Es wird hier **kein neuer Analyse-Lauf** gestartet — dafür die CLI verwenden."
-        )
+    st.session_state["selected_run"] = selected_dir.name
 
     report = load_report(selected_dir)
     meta = report.run_metadata
 
-    st.title("📊 YouTube Shorts Research-Dashboard")
+    st.title("📊 Ergebnisse")
     st.caption(
         f"Lauf-ID `{meta.run_id}` · erstellt {meta.started_at:%d.%m.%Y %H:%M} UTC · Modell `{meta.model_used}`"
     )
@@ -343,6 +569,16 @@ def main() -> None:
                 file_name=f"{meta.run_id}_report.md",
                 mime="text/markdown",
             )
+
+
+
+def main() -> None:
+    st.set_page_config(page_title="Shorts Analytics – Control Panel", page_icon="📊", layout="wide")
+    PAGES["new"] = st.Page(page_new_run, title="Neuer Lauf", icon="🚀", default=True)
+    PAGES["progress"] = st.Page(page_progress, title="Fortschritt", icon="⏱️", url_path="fortschritt")
+    PAGES["results"] = st.Page(page_results, title="Ergebnisse", icon="📊", url_path="ergebnisse")
+    PAGES["runs"] = st.Page(page_all_runs, title="Alle Läufe", icon="🗂️", url_path="laeufe")
+    st.navigation(list(PAGES.values())).run()
 
 
 if __name__ == "__main__":

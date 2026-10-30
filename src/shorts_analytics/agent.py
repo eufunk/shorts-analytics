@@ -12,13 +12,17 @@ tauschen ausschliesslich typisierte Modelle aus (models.py). Fehler werden
 pro Stage/Item protokolliert statt den ganzen Lauf abzubrechen, wo immer das
 sinnvoll ist - nur wenn eine Stage gar keine verwertbaren Daten liefert,
 bricht der jeweilige Teil ab.
+
+Optional meldet run() den Fortschritt jeder Stage ueber einen Callback und
+prueft zwischen zwei Arbeitsschritten, ob der Lauf angehalten werden soll
+(siehe run_status.py; genutzt vom Control Panel im Ordner dashboard/).
 """
 
 from __future__ import annotations
 
 import datetime as dt
-import uuid
 from pathlib import Path
+from typing import Callable
 
 from shorts_analytics import config, persistence
 from shorts_analytics.analysis import patterns as patterns_stage
@@ -41,6 +45,7 @@ from shorts_analytics.models import (
 from shorts_analytics.preprocessing.cleaning import clean_videos
 from shorts_analytics.reporting.markdown_renderer import render_markdown
 from shorts_analytics.reporting.report_builder import build_report
+from shorts_analytics.run_status import ProgressCallback, RunCancelled, new_run_id
 from shorts_analytics.validation.validators import validate_videos
 
 
@@ -64,14 +69,24 @@ class ResearchAgent:
         self._own_analytics_collector = own_analytics_collector or NotConfiguredOwnAnalyticsCollector()
         self._llm = llm_client or LLMClient(anthropic_api_key, model=model)
         self._data_dir = data_dir or (Path.cwd() / "data" / "runs")
+        self._progress: ProgressCallback | None = None
+        self._should_stop: Callable[[], bool] | None = None
 
     def run(
         self,
         categories: list[str] | None = None,
         max_results_per_query: int = config.DEFAULT_MAX_RESULTS_PER_QUERY,
+        run_id: str | None = None,
+        progress: ProgressCallback | None = None,
+        should_stop: Callable[[], bool] | None = None,
     ) -> Report:
+        """Fuehrt alle Stages aus. Wirft RunCancelled, wenn should_stop() True liefert;
+        in diesem Fall wird kein Report gespeichert."""
+        self._progress = progress
+        self._should_stop = should_stop
         categories = categories or list(config.DEFAULT_SEARCH_QUERIES.keys())
-        run_id = f"{dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}_{uuid.uuid4().hex[:8]}"
+        run_id = run_id or new_run_id()
+        self._step(0, f"{len(categories)} Kategorie(n) ausgewählt")
         metadata = RunMetadata(
             run_id=run_id,
             started_at=dt.datetime.now(dt.timezone.utc),
@@ -83,6 +98,7 @@ class ResearchAgent:
         raw_videos = self._collect(categories, max_results_per_query, metadata)
         metadata.videos_examined = len(raw_videos)
 
+        self._step(2, f"{len(raw_videos)} Shorts werden geprüft")
         validated = validate_videos(raw_videos)
         metadata.videos_rejected = len(validated.rejected)
         for video_id, reason in validated.rejected:
@@ -90,6 +106,7 @@ class ResearchAgent:
 
         self._enrich_with_own_analytics(validated.valid, metadata)
 
+        self._step(3, f"{len(validated.valid)} gültige Shorts werden bereinigt")
         cleaning_result = clean_videos(validated.valid)
         metadata.videos_valid = len(cleaning_result.videos)
         if cleaning_result.duplicates_removed:
@@ -102,14 +119,18 @@ class ResearchAgent:
 
         classifications = self._classify(cleaning_result.videos, metadata)
 
+        self._step(5, "Kennzahlen werden berechnet")
         analysis = stats_stage.analyze(cleaning_result.videos, classifications)
 
-        top_topics = ranking_stage.rank_groups(analysis.by_topic)
-        top_formats = ranking_stage.rank_groups(analysis.by_format)
-
+        self._step(6, "KI interpretiert wiederkehrende Muster")
         insights = self._interpret_patterns(analysis, metadata)
         limitations = self._collect_limitations(analysis)
 
+        self._step(7, "Themen und Formate werden gerankt")
+        top_topics = ranking_stage.rank_groups(analysis.by_topic)
+        top_formats = ranking_stage.rank_groups(analysis.by_format)
+
+        self._step(8, "Report wird geschrieben")
         report = build_report(
             client=self._llm,
             run_metadata=metadata,
@@ -127,17 +148,24 @@ class ResearchAgent:
 
         return report
 
+    def _step(self, stage_index: int, detail: str, current: int | None = None, total: int | None = None) -> None:
+        """Meldet den Fortschritt und bricht ab, falls ein Stopp angefordert wurde."""
+        if self._should_stop and self._should_stop():
+            raise RunCancelled(f"Lauf vor Stage {stage_index} angehalten.")
+        if self._progress:
+            self._progress(stage_index, detail, current, total)
+
     def _collect(self, categories: list[str], max_results_per_query: int, metadata: RunMetadata) -> list[ShortVideo]:
         videos: list[ShortVideo] = []
-        for category in categories:
-            queries = config.DEFAULT_SEARCH_QUERIES.get(category, [])
-            for query in queries:
-                metadata.search_topics.append(f"{category}: {query}")
-                try:
-                    video_ids = self._public_collector.search_shorts(query, max_results=max_results_per_query)
-                    videos.extend(self._public_collector.fetch_video_details(video_ids, search_topic=category))
-                except RuntimeError as exc:
-                    metadata.errors.append(f"collection[{category}/{query}]: {exc}")
+        jobs = [(c, q) for c in categories for q in config.DEFAULT_SEARCH_QUERIES.get(c, [])]
+        for index, (category, query) in enumerate(jobs):
+            self._step(1, f"Suche „{query}“ ({category})", index, len(jobs))
+            metadata.search_topics.append(f"{category}: {query}")
+            try:
+                video_ids = self._public_collector.search_shorts(query, max_results=max_results_per_query)
+                videos.extend(self._public_collector.fetch_video_details(video_ids, search_topic=category))
+            except RuntimeError as exc:
+                metadata.errors.append(f"collection[{category}/{query}]: {exc}")
         if videos and DataSource.PUBLIC not in metadata.data_sources:
             metadata.data_sources.append(DataSource.PUBLIC)
         return videos
@@ -179,7 +207,8 @@ class ResearchAgent:
         results: list[ClassificationResult] = []
         new_topic_suggestions: set[str] = set()
 
-        for video in videos:
+        for index, video in enumerate(videos):
+            self._step(4, f"Video {index + 1} von {len(videos)}: {video.title}", index, len(videos))
             try:
                 topic_raw = classify_topic(self._llm, video)
                 hook_raw = classify_hook(self._llm, video)
