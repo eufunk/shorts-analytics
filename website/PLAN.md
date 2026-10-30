@@ -59,3 +59,18 @@
 - [x] **CP3 – Desktop-Verknüpfung:** „Shorts Analytics“ auf dem Desktop, zeigt auf das Startskript.
 - [x] **CP4 – Test:** Start aus kaltem Zustand und Start bei bereits laufendem Server geprüft.
 - [x] **CP5 – Doku:** README um den Start per Doppelklick ergänzen.
+
+---
+
+## Task 4: Alte Läufe löschen ✅
+
+**Hinzugefügt:** 30.10.2026
+**Ziel:** Auf der Seite „Alle Läufe“ einen oder mehrere Läufe auswählen und mit allen Dateien löschen können.
+
+### Checkpoints
+
+- [x] **CP1 – Löschfunktion:** `run_control.delete_run()` löscht den Lauf-Ordner. Laufende Läufe werden nicht gelöscht, und es werden nur Ordner innerhalb von `data/runs/` angefasst.
+- [x] **CP2 – Oberfläche:** Mehrfachauswahl in der Tabelle, Button „Löschen“ mit Sicherheitsabfrage (Anzahl und Lauf-IDs). Laufende Läufe sind ausgenommen, mit Hinweis.
+- [x] **CP3 – Tests:** Löschen, Schutz laufender Läufe, Schutz vor Pfaden außerhalb von `data/runs/`.
+- [x] **CP4 – Prüfung im Browser:** Löschen mit einem Testlauf durchgespielt (keine echten Läufe gelöscht).
+- [x] **CP5 – Doku:** README ergänzen.

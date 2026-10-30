@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
+import stat
 from pathlib import Path
+
+import pytest
 
 from shorts_analytics import run_control
 from shorts_analytics.run_status import RunState, RunStatus, read_status, write_status
@@ -73,3 +77,46 @@ def test_missing_api_keys(tmp_path: Path, monkeypatch):
 
     (tmp_path / ".env").write_text("YOUTUBE_API_KEY=abc\n", encoding="utf-8")
     assert run_control.missing_api_keys(tmp_path) == ["ANTHROPIC_API_KEY"]
+
+
+def test_delete_run_removes_finished_run(tmp_path: Path):
+    run_dir = tmp_path / "data" / "runs" / "20261030T100000Z_a"
+    write_status(run_dir, RunStatus(run_id="a", state=RunState.FINISHED))
+    (run_dir / "report.json").write_text("{}", encoding="utf-8")
+
+    run_control.delete_run(tmp_path, "20261030T100000Z_a")
+
+    assert not run_dir.exists()
+
+
+def test_delete_run_refuses_running_run(tmp_path: Path):
+    run_dir = tmp_path / "data" / "runs" / "20261030T100000Z_b"
+    write_status(run_dir, RunStatus(run_id="b"))  # laeuft, Prozess startet gerade
+
+    with pytest.raises(ValueError, match="läuft noch"):
+        run_control.delete_run(tmp_path, "20261030T100000Z_b")
+    assert run_dir.exists()
+
+
+def test_delete_run_refuses_paths_outside_runs_dir(tmp_path: Path):
+    (tmp_path / "data" / "runs").mkdir(parents=True)
+    outside = tmp_path / "data" / "wichtig"
+    outside.mkdir()
+
+    for bad_id in ["../wichtig", "..", "", "gibt-es-nicht"]:
+        with pytest.raises(ValueError):
+            run_control.delete_run(tmp_path, bad_id)
+    assert outside.exists()
+
+
+def test_delete_run_removes_read_only_folders(tmp_path: Path):
+    # OneDrive markiert synchronisierte Ordner als schreibgeschuetzt
+    run_dir = tmp_path / "data" / "runs" / "20261030T100000Z_c"
+    write_status(run_dir, RunStatus(run_id="c", state=RunState.FAILED))
+    (run_dir / "log.txt").write_text("x", encoding="utf-8")
+    os.chmod(run_dir / "log.txt", stat.S_IREAD)
+    os.chmod(run_dir, stat.S_IREAD)
+
+    run_control.delete_run(tmp_path, "20261030T100000Z_c")
+
+    assert not run_dir.exists()

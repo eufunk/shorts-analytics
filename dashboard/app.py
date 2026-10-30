@@ -440,17 +440,56 @@ def page_all_runs() -> None:
             for run in runs
         ]
     )
-    st.caption("Zeile anklicken, um den Lauf zu öffnen.")
+    st.caption("Zeile anklicken, um den Lauf zu öffnen. Mehrere Zeilen auswählen, um sie zu löschen.")
     event = st.dataframe(
-        table, hide_index=True, use_container_width=True, on_select="rerun", selection_mode="single-row"
+        table, hide_index=True, use_container_width=True, on_select="rerun", selection_mode="multi-row"
     )
-    if event.selection.rows:
-        run = runs[event.selection.rows[0]]
+    selected = [runs[i] for i in event.selection.rows]
+    if not selected:
+        return
+
+    if len(selected) == 1:
+        run = selected[0]
         col1, col2 = st.columns(2)
         if col1.button("⏱️ Fortschritt anzeigen", use_container_width=True):
             open_progress(run.run_id)
         if col2.button("📊 Ergebnisse ansehen", use_container_width=True, disabled=not run.has_report, type="primary"):
             open_results(run.run_id)
+
+    deletable = [run for run in selected if run.state != RunState.RUNNING]
+    if len(deletable) < len(selected):
+        st.info("Laufende Läufe können nicht gelöscht werden. Bitte zuerst auf der Seite „Fortschritt“ anhalten.")
+    label = "🗑️ Lauf löschen" if len(deletable) == 1 else f"🗑️ {len(deletable)} Läufe löschen"
+    if deletable and st.button(label):
+        confirm_delete([run.run_id for run in deletable])
+
+
+@st.dialog("Läufe löschen")
+def confirm_delete(run_ids: list[str]) -> None:
+    st.write(
+        f"Diese {len(run_ids)} Läufe werden mit allen Dateien (Rohdaten, Report, Log) endgültig gelöscht:"
+        if len(run_ids) > 1
+        else "Dieser Lauf wird mit allen Dateien (Rohdaten, Report, Log) endgültig gelöscht:"
+    )
+    for run_id in run_ids:
+        st.markdown(f"- `{run_id}`")
+    st.warning("Das lässt sich nicht rückgängig machen.")
+    col1, col2 = st.columns(2)
+    if col1.button("Endgültig löschen", type="primary", use_container_width=True):
+        errors = []
+        for run_id in run_ids:
+            try:
+                run_control.delete_run(PROJECT_ROOT, run_id)
+            except (ValueError, OSError) as exc:
+                errors.append(str(exc))
+        if st.session_state.get("selected_run") in run_ids:
+            del st.session_state["selected_run"]
+        if errors:
+            st.error("\n\n".join(errors))
+        else:
+            st.rerun()
+    if col2.button("Abbrechen", use_container_width=True):
+        st.rerun()
 
 
 def page_results() -> None:

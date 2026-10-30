@@ -79,7 +79,7 @@ Statt über das Terminal lässt sich der Agent bequem im Browser bedienen. Das C
 - **Neuer Lauf** – Themen und Anzahl Videos wählen, geschätzten Verbrauch (YouTube-Kontingent, KI-Aufrufe) ansehen, Lauf starten
 - **Fortschritt** – Live-Anzeige der 9 Pipeline-Schritte (aktualisiert alle 2 Sekunden), Lauf anhalten oder im Notfall sofort beenden, Ausgabe des Agenten (`log.txt`)
 - **Ergebnisse** – Visualisierung eines fertigen Reports (KPI-Kacheln, Balkendiagramme je Thema/Hook/Format/Videolänge, Datenvollständigkeit, Rankings, erkannte Muster, Rohdaten-Export)
-- **Alle Läufe** – Übersicht aller Läufe mit Status (läuft / fertig / abgebrochen / fehlgeschlagen)
+- **Alle Läufe** – Übersicht aller Läufe mit Status (läuft / fertig / abgebrochen / fehlgeschlagen); einen oder mehrere Läufe auswählen und nach Sicherheitsabfrage mit allen Dateien löschen (laufende Läufe sind ausgenommen)
 
 ```bash
 pip install -e ".[dashboard]"

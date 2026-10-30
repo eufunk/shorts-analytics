@@ -12,6 +12,8 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import shutil
+import stat
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -132,6 +134,26 @@ def kill_run(run_dir: Path) -> None:
     status.detail = "Lauf wurde sofort beendet"
     status.finished_at = dt.datetime.now(dt.timezone.utc)
     write_status(run_dir, status)
+
+
+def delete_run(project_root: Path, run_id: str) -> None:
+    """Loescht einen Lauf mit allen Dateien. Laufende Laeufe werden nicht geloescht."""
+    base = runs_dir(project_root).resolve()
+    run_dir = (base / run_id).resolve()
+    if run_dir.parent != base or not run_dir.is_dir():
+        raise ValueError(f"Kein Lauf-Ordner unter data/runs/: {run_id!r}")
+    if load_run(run_dir).state == RunState.RUNNING:
+        raise ValueError(f"Lauf {run_id} läuft noch und kann nicht gelöscht werden. Bitte zuerst anhalten.")
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(run_dir, onexc=_clear_readonly_and_retry)
+    else:
+        shutil.rmtree(run_dir, onerror=_clear_readonly_and_retry)
+
+
+def _clear_readonly_and_retry(func, path, _exc) -> None:
+    """OneDrive setzt synchronisierte Ordner/Dateien schreibgeschuetzt - Schutz aufheben und erneut loeschen."""
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
 
 
 def is_process_alive(pid: int) -> bool:
