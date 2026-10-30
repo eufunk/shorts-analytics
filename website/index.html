@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>shorts-analytics – Research-Agent für YouTube Shorts</title>
+<meta name="description" content="Ein KI-Research-Agent, der untersucht, welche YouTube Shorts Zuschauer wirklich halten – nicht nur, welche die meisten Aufrufe haben.">
+<style>
+  :root {
+    --bg: #fbfaf7;
+    --surface: #ffffff;
+    --text: #1d1d1f;
+    --muted: #5f6368;
+    --border: #e4e1da;
+    --accent: #c4302b;
+    --accent-soft: #fbe9e8;
+    --ok: #1e7f4f;
+    --ok-soft: #e3f3ea;
+    --plan: #8a5a00;
+    --plan-soft: #fdf1d8;
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141416;
+      --surface: #1d1d20;
+      --text: #ececee;
+      --muted: #a0a0a8;
+      --border: #2e2e33;
+      --accent: #ff6b63;
+      --accent-soft: #3a1f1e;
+      --ok: #5fd39a;
+      --ok-soft: #173326;
+      --plan: #f2bf5e;
+      --plan-soft: #3a2f17;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+  a { color: var(--accent); }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 24px; }
+
+  nav {
+    position: sticky; top: 0; z-index: 10;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+  }
+  nav .wrap { display: flex; gap: 20px; align-items: center; height: 56px; overflow-x: auto; }
+  nav .brand { font-weight: 700; margin-right: auto; white-space: nowrap; }
+  nav a { color: var(--muted); text-decoration: none; font-size: 0.93rem; white-space: nowrap; }
+  nav a:hover { color: var(--text); }
+
+  header.hero { padding: 88px 0 64px; }
+  .eyebrow {
+    display: inline-block; font-size: 0.8rem; font-weight: 600; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--accent); background: var(--accent-soft);
+    padding: 4px 12px; border-radius: 999px;
+  }
+  h1 { font-size: clamp(2rem, 5vw, 3.2rem); line-height: 1.15; margin: 18px 0 16px; letter-spacing: -0.02em; }
+  .lead { font-size: 1.2rem; color: var(--muted); max-width: 720px; margin: 0; }
+  .question {
+    margin-top: 32px; padding: 20px 24px; border-left: 4px solid var(--accent);
+    background: var(--surface); border-radius: 0 var(--radius) var(--radius) 0;
+    font-size: 1.08rem; max-width: 760px;
+  }
+
+  section { padding: 56px 0; border-top: 1px solid var(--border); }
+  h2 { font-size: 1.7rem; margin: 0 0 8px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin: 0 0 28px; max-width: 720px; }
+
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 22px;
+  }
+  .card h3 { margin: 0 0 6px; font-size: 1.05rem; }
+  .card p { margin: 0; color: var(--muted); font-size: 0.96rem; }
+  .icon { font-size: 1.5rem; margin-bottom: 8px; display: block; }
+
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px; }
+  @media (max-width: 640px) { .compare { grid-template-columns: 1fr; } }
+
+  ol.pipeline { list-style: none; counter-reset: step; padding: 0; margin: 0; display: grid; gap: 10px; }
+  ol.pipeline li {
+    counter-increment: step; display: grid; grid-template-columns: 40px 1fr auto; gap: 14px; align-items: center;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px;
+  }
+  ol.pipeline li::before {
+    content: counter(step); width: 32px; height: 32px; border-radius: 50%;
+    display: grid; place-items: center; font-weight: 700; font-size: .9rem;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  ol.pipeline small { color: var(--muted); display: block; }
+  .tag { font-size: .75rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+  .tag.py { background: var(--ok-soft); color: var(--ok); }
+  .tag.llm { background: var(--plan-soft); color: var(--plan); }
+
+  .status-head { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  .badge { font-size: .8rem; font-weight: 700; padding: 4px 12px; border-radius: 999px; }
+  .badge.done { background: var(--ok-soft); color: var(--ok); }
+  .badge.planned { background: var(--plan-soft); color: var(--plan); }
+  ul.checks { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+  ul.checks li {
+    display: grid; grid-template-columns: 28px 1fr; gap: 10px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+  }
+  ul.checks li .mark { font-weight: 700; }
+  ul.checks.done .mark { color: var(--ok); }
+  ul.checks.planned .mark { color: var(--plan); }
+  ul.checks strong { display: block; }
+  ul.checks span.d { color: var(--muted); font-size: .94rem; }
+
+  .note {
+    margin-top: 24px; padding: 18px 20px; border-radius: var(--radius);
+    background: var(--plan-soft); color: var(--text); font-size: .96rem;
+  }
+  code { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: .9em;
+    background: var(--accent-soft); padding: 1px 6px; border-radius: 6px; }
+
+  footer { padding: 40px 0 64px; color: var(--muted); font-size: .9rem; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <span class="brand">▶ shorts-analytics</span>
+    <a href="#zweck">Zweck</a>
+    <a href="#nutzen">Nutzen</a>
+    <a href="#zielgruppe">Für wen</a>
+    <a href="#ablauf">So funktioniert's</a>
+    <a href="#erledigt">Erledigt</a>
+    <a href="#geplant">Geplant</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="eyebrow">KI-Research-Agent · Version 0.1</span>
+    <h1>Welche YouTube Shorts werden bis zum Ende angeschaut und warum?</h1>
+    <p class="lead">
+      <strong>shorts-analytics</strong> ist ein Research-Agent mit eigener <strong>Bedienoberfläche im Browser</strong>.
+      Dort wählt man Themen und die Anzahl der Videos und startet den Lauf <strong>per Klick</strong>. Danach arbeitet
+      der Agent <strong>ohne weiteres Zutun</strong> alle Schritte ab: Er sucht passende Shorts über die YouTube-Schnittstelle,
+      prüft und bereinigt die Daten, lässt Thema und Einstieg jedes Videos von der KI einordnen, wertet alles statistisch
+      aus und schreibt am Ende einen Report. Den Fortschritt verfolgt man live, kann den Lauf jederzeit anhalten und sieht
+      sich anschließend die Ergebnisse direkt dort an.
+    </p>
+    <div class="question">
+      „Welche Themen, Videoformate, Hooks und strukturellen Eigenschaften weisen bei erfolgreichen
+      YouTube Shorts eine besonders hohe Zuschauerbindung bzw. Durchschauquote auf?“
+    </div>
+  </div>
+</header>
+
+<main>
+
+<section id="zweck">
+  <div class="wrap">
+    <h2>Wofür wurde das Projekt erstellt?</h2>
+    <p class="sub">Das Projekt verfolgt zwei Ziele: eine fachliche Fragestellung beantworten und dabei lernen, wie man einen vertrauenswürdigen KI-Agenten baut.</p>
+    <div class="compare">
+      <div class="card">
+        <span class="icon">🎯</span>
+        <h3>Fachliches Ziel</h3>
+        <p>Herausfinden, welche Shorts Zuschauer nach den ersten Sekunden vom Weiterwischen abhalten und
+        möglichst bis zum Ende gesehen werden. „Erfolg“ bedeutet hier nicht nur viele Aufrufe, sondern vor
+        allem hohe <strong>Zuschauerbindung</strong> (Retention).</p>
+      </div>
+      <div class="card">
+        <span class="icon">🧠</span>
+        <h3>Lernziel</h3>
+        <p>Verstehen und üben, wie man einen KI-Agenten baut, ohne unnötige Enterprise-Architektur.
+        Er soll verständlich, modular, testbar und für eine einzelne Person handhabbar sein.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="nutzen">
+  <div class="wrap">
+    <h2>Welchen Nutzen hat es?</h2>
+    <p class="sub">Statt Bauchgefühl und Einzelbeispielen liefert der Agent eine systematische, wiederholbare Auswertung.</p>
+    <div class="grid">
+      <div class="card">
+        <span class="icon">⚙️</span>
+        <h3>Automatisierte Recherche</h3>
+        <p>Ein Befehl startet den ganzen Ablauf: Videos sammeln, bereinigen, einordnen, auswerten und einen Report schreiben.</p>
+      </div>
+      <div class="card">
+        <span class="icon">🛡️</span>
+        <h3>Keine erfundenen Daten</h3>
+        <p>Jedes Datenfeld trägt seine Herkunft (<code>public</code>, <code>own_analytics</code>, <code>derived</code>, <code>unavailable</code>). Fehlende Werte werden als fehlend ausgewiesen und nicht geschätzt.</p>
+      </div>
+      <div class="card">
+        <span class="icon">📐</span>
+        <h3>Verlässliche Zahlen</h3>
+        <p>Mittelwerte, Mediane, Quantile, Korrelationen und Rankings rechnet Python/pandas deterministisch. Das Sprachmodell rechnet nie.</p>
+      </div>
+      <div class="card">
+        <span class="icon">🔁</span>
+        <h3>Reproduzierbar</h3>
+        <p>Jeder Lauf speichert Rohdaten, bereinigte Daten, Klassifizierungen, Suchparameter und das verwendete Modell.</p>
+      </div>
+      <div class="card">
+        <span class="icon">📊</span>
+        <h3>Bequeme Bedienoberfläche</h3>
+        <p>Läufe per Klick starten und anhalten, den Fortschritt live verfolgen und Ergebnisse mit KPIs, Vergleichen nach Thema, Hook, Format und Länge sowie Rankings ansehen.</p>
+      </div>
+      <div class="card">
+        <span class="icon">💡</span>
+        <h3>Übertragbare Erkenntnisse</h3>
+        <p>Der Report zeigt, welche Hooks, Formate und Längen sich auf eigene Shorts übertragen lassen.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="zielgruppe">
+  <div class="wrap">
+    <h2>Für wen ist das Projekt?</h2>
+    <p class="sub">Für alle, die Kurzvideos datenbasiert verstehen wollen, und für alle, die lernen wollen, wie ein KI-Agent sauber aufgebaut wird.</p>
+    <div class="grid">
+      <div class="card">
+        <span class="icon">🎬</span>
+        <h3>Content Creator</h3>
+        <p>Wer eigene Shorts produziert und wissen will, welche Einstiege, Themen und Längen Zuschauer halten.</p>
+      </div>
+      <div class="card">
+        <span class="icon">📈</span>
+        <h3>Social-Media- &amp; Marketing-Teams</h3>
+        <p>Wer Content-Strategien mit Daten statt mit Vermutungen begründen möchte.</p>
+      </div>
+      <div class="card">
+        <span class="icon">🔬</span>
+        <h3>Analyst:innen &amp; Studierende</h3>
+        <p>Wer eine methodisch transparente Untersuchung mit offen dokumentierten Grenzen braucht.</p>
+      </div>
+      <div class="card">
+        <span class="icon">🧩</span>
+        <h3>Einsteiger:innen in KI-Agenten</h3>
+        <p>Wer an einem echten, verständlichen Beispiel lernen will, wann ein Sprachmodell sinnvoll ist und wann klassischer Code besser passt.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="ablauf">
+  <div class="wrap">
+    <h2>So funktioniert der Agent</h2>
+    <p class="sub">Eine feste, nachvollziehbare Pipeline statt einer undurchsichtigen Multi-Agenten-Konstruktion. Das Sprachmodell (Claude) kommt nur dort zum Einsatz, wo inhaltliches Verständnis gebraucht wird.</p>
+    <ol class="pipeline">
+      <li><div><strong>Research</strong><small>Suchparameter und Kategorien festlegen</small></div><span class="tag py">Python</span></li>
+      <li><div><strong>Datensammlung</strong><small>Öffentliche Daten über die YouTube Data API v3</small></div><span class="tag py">Python</span></li>
+      <li><div><strong>Validierung</strong><small>Plausibilität und Vollständigkeit prüfen</small></div><span class="tag py">Python</span></li>
+      <li><div><strong>Bereinigung</strong><small>Duplikate entfernen, Werte normalisieren</small></div><span class="tag py">Python</span></li>
+      <li><div><strong>Klassifizierung</strong><small>Thema, Hook-Typ und Struktur je Video</small></div><span class="tag llm">LLM</span></li>
+      <li><div><strong>Quantitative Analyse</strong><small>Mittelwerte, Mediane, Quantile, Korrelationen</small></div><span class="tag py">Python</span></li>
+      <li><div><strong>Mustererkennung</strong><small>Wiederkehrende Muster interpretieren</small></div><span class="tag llm">LLM</span></li>
+      <li><div><strong>Ranking</strong><small>Themen, Hooks und Formate vergleichen</small></div><span class="tag py">Python</span></li>
+      <li><div><strong>Report</strong><small><code>report.json</code> und <code>report.md</code>, anzeigbar in der Oberfläche</small></div><span class="tag py">Python</span></li>
+    </ol>
+  </div>
+</section>
+
+<section id="erledigt">
+  <div class="wrap">
+    <div class="status-head"><h2>Was ist erledigt?</h2><span class="badge done">Stand 30.10.2026</span></div>
+    <ul class="checks done">
+      <li><span class="mark">✓</span><div><strong>Fachliche Spezifikation</strong><span class="d">Forschungsfrage, Erfolgsdefinition, 20 Themenkategorien und Strukturmerkmale (Hook, Spannungsaufbau, Payoff, Loop-Potenzial) dokumentiert.</span></div></li>
+      <li><span class="mark">✓</span><div><strong>Architektur geplant (Prompt 1)</strong><span class="d">Modulare Pipeline mit klarer Aufteilung zwischen LLM und deterministischem Code.</span></div></li>
+      <li><span class="mark">✓</span><div><strong>Agent implementiert (Prompt 2)</strong><span class="d">Datensammlung, Validierung, Bereinigung, Themen- und Hook-Klassifizierung, Statistik, Mustererkennung, Ranking und Report-Erzeugung.</span></div></li>
+      <li><span class="mark">✓</span><div><strong>Kommandozeile &amp; Persistenz</strong><span class="d">Befehl <code>shorts-analytics</code> mit Kategorie- und Stichprobenfiltern; jeder Lauf wird vollständig unter <code>data/runs/</code> abgelegt.</span></div></li>
+      <li><span class="mark">✓</span><div><strong>Bedienoberfläche (Control Panel)</strong><span class="d">Vier Seiten im Browser: Neuer Lauf (Themen, Anzahl Videos, geschätzter API-Verbrauch, Start), Fortschritt (Live-Anzeige der 9 Schritte, Anhalten), Ergebnisse (Diagramme, Rankings, Muster, Rohdaten-Export) und Alle Läufe. Fertig seit 30.10.2026.</span></div></li>
+      <li><span class="mark">✓</span><div><strong>Automatisierte Tests</strong><span class="d">41 Tests (Unit-Tests je Modul + Integrationstests der ganzen Pipeline mit Fake-YouTube- und Fake-LLM-Client), alle bestanden am 30.10.2026. Geprüft wird unter anderem, dass fehlende Retention-Daten nicht erfunden werden und dass ein angehaltener Lauf keinen Report hinterlässt.</span></div></li>
+      <li><span class="mark">✓</span><div><strong>Dokumentation &amp; Präsentation</strong><span class="d">Projektdokumentation für Einsteiger:innen, Prompt-Sammlung und Präsentationsfolien.</span></div></li>
+      <li><span class="mark">✓</span><div><strong>Projekt-Webseite</strong><span class="d">Diese Seite (30.10.2026).</span></div></li>
+    </ul>
+  </div>
+</section>
+
+<section id="geplant">
+  <div class="wrap">
+    <div class="status-head"><h2>Was ist geplant?</h2><span class="badge planned">Nächste Ausbaustufen</span></div>
+    <ul class="checks planned">
+      <li><span class="mark">○</span><div><strong>Ergebnisse beurteilen</strong><span class="d">Läufe und erkannte Muster in der Oberfläche bewerten und mit Notizen versehen (zurückgestellt am 30.10.2026).</span></div></li>
+      <li><span class="mark">○</span><div><strong>Robustere Bias-Behandlung</strong><span class="d">Vergleich mit Kontrollgruppen durchschnittlicher Shorts sowie Konfidenzintervalle, damit Aussagen nicht nur auf viralen Ausreißern beruhen.</span></div></li>
+      <li><span class="mark">○</span><div><strong>Mehr Eigenständigkeit</strong><span class="d">Der Agent entscheidet selbst, ob Stichprobe und Datenlage für belastbare Aussagen ausreichen, und sammelt gegebenenfalls nach.</span></div></li>
+      <li><span class="mark">○</span><div><strong>Evaluation-Agent</strong><span class="d">Ein eigener Prüfschritt gleicht jede Aussage im Report mit den Rohdaten ab.</span></div></li>
+      <li><span class="mark">○</span><div><strong>Eigene YouTube-Analytics-Daten (Ebene 2)</strong><span class="d">OAuth-Anbindung an die YouTube Analytics API, um echte Retention-Werte („stayed to watch“, gesehener Prozentsatz) für den eigenen Kanal einzubeziehen. Die Schnittstelle ist bereits vorbereitet.</span></div></li>
+    </ul>
+    <div class="note">
+      <strong>Wichtige Einschränkung:</strong> Retention-Kennzahlen fremder Kanäle sind über die öffentliche
+      YouTube-API nicht verfügbar. Der Agent weist diese Felder deshalb konsequent als „nicht verfügbar“ aus,
+      statt sie aus Aufrufen oder Likes zu schätzen. Belastbare Retention-Aussagen sind erst mit eigenen Analytics-Daten möglich.
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    shorts-analytics · Research-Agent für YouTube Shorts · Stand dieser Seite: 30.10.2026<br>
+    Details zu Setup und Nutzung: <a href="../README.md">README</a> · Spezifikation: <a href="../docs/YouTube_Shorts_Research_Analyse.docx">YouTube_Shorts_Research_Analyse.docx</a>
+  </div>
+</footer>
+
+</body>
+</html>
