@@ -77,14 +77,16 @@ Jeder Lauf erzeugt einen Ordner unter `data/runs/<run_id>/` mit:
 Statt über das Terminal lässt sich der Agent bequem im Browser bedienen. Das Control Panel ([`dashboard/app.py`](dashboard/app.py)) hat vier Seiten:
 
 - **Neuer Lauf** – Themen und Anzahl Videos wählen, geschätzten Verbrauch (YouTube-Kontingent, KI-Aufrufe) ansehen, Lauf starten
-- **Fortschritt** – Live-Anzeige der 9 Pipeline-Schritte (aktualisiert alle 2 Sekunden), Lauf anhalten oder im Notfall sofort beenden, Ausgabe des Agenten (`log.txt`)
-- **Ergebnisse** – Visualisierung eines fertigen Reports (KPI-Kacheln, Balkendiagramme je Thema/Hook/Format/Videolänge, Datenvollständigkeit, Rankings, erkannte Muster, Rohdaten-Export)
+- **Fortschritt** – Live-Anzeige (alle 2 Sekunden): Status-Abzeichen, Fortschrittsbalken mit aktuellem Schritt („Video 3 von 10“), die 9 Pipeline-Schritte als Leiste, Laufzeit; Lauf anhalten oder im Notfall sofort beenden, Ausgabe des Agenten (`log.txt`). Direktlink auf einen Lauf: `/fortschritt?lauf=<Lauf-ID>`
+- **Ergebnisse** – ein fertiger Report als Tafeln (Karten), aufgeteilt auf Reiter, die ohne Scrollen auf den Bildschirm passen: Überblick („Die wichtigsten Erkenntnisse“: Top-Thema / bester Einstieg / beste Länge; „Was heißt das für dich?“: Top-Empfehlung und Kernaussage; Kennzahlen als Abzeichen in der Kopfzeile) · Themen · Einstieg (Hook) · Formate · Videolänge (je eine Leitfrage und eine Rangliste mit Balken und Werten in Worten, genaue Zahlen aufklappbar) · Top 3 (Siegertreppchen der drei Besten aus Themen, Einstieg, Formaten und Videolänge) · Muster · Empfehlungen · Daten (welche Angaben es zu den Videos gab, Excel-Download mit den Blättern „Videos“, „Auswertung“ und „Erklärung“, Tabellenansicht aller Videos) · Lauf-Details
 - **Alle Läufe** – Übersicht aller Läufe mit Status (läuft / fertig / abgebrochen / fehlgeschlagen); einen oder mehrere Läufe auswählen und nach Sicherheitsabfrage mit allen Dateien löschen (laufende Läufe sind ausgenommen)
 
 ```bash
 pip install -e ".[dashboard]"
 streamlit run dashboard/app.py
 ```
+
+Das Erscheinungsbild (Farben, Akzentfarbe wie die Projekt-Webseite) ist in [`.streamlit/config.toml`](.streamlit/config.toml) festgelegt, die Karten-Gestaltung als CSS in `dashboard/app.py`.
 
 **Start per Doppelklick (Windows):** [`start_control_panel.bat`](start_control_panel.bat) startet den Server auf Port 8502 in einem minimierten Fenster und öffnet das Control Panel im Browser. Läuft der Server schon, wird nur der Browser geöffnet. Fenster „Shorts Analytics Server“ schließen = Server beenden. Eine Desktop-Verknüpfung mit eigenem Symbol ([`dashboard/icon.ico`](dashboard/icon.ico)) lässt sich auf das Skript anlegen.
 

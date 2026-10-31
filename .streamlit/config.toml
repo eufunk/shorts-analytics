@@ -1,0 +1,13 @@
+# Erscheinungsbild des Control Panels (dashboard/app.py).
+# Akzentfarbe wie die Projekt-Webseite (website/index.html).
+[theme]
+base = "light"
+primaryColor = "#c4302b"
+backgroundColor = "#f5f5f2"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#0b0b0b"
+baseRadius = "0.75rem"
+
+[client]
+# blendet u.a. den "Deploy"-Knopf oben rechts aus
+toolbarMode = "minimal"
